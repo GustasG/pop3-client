@@ -1,0 +1,11 @@
+# JetBrains IDE
+.idea/
+
+# IntelliJ IDE
+out/
+
+# Visual Studio Code
+.vscode/
+
+# Compiled build
+target/
