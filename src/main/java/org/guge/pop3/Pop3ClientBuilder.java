@@ -1,6 +1,7 @@
 package org.guge.pop3;
 
 import java.io.IOException;
+import java.net.Socket;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -51,7 +52,7 @@ public class Pop3ClientBuilder {
         client.setTimeout(timeout);
 
         if (username != null && password != null) {
-            client.authenticateWithCredentials(username, password);
+            client.authenticate(username, password);
         }
 
         return client;

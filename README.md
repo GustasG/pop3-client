@@ -10,6 +10,7 @@ This client was implemented according to [RFC1939](https://www.ietf.org/rfc/rfc1
 - USER
 - PASS
 - QUIT
+- NOOP
 - STAT
 - LIST [msg]
 - DELE
@@ -18,7 +19,6 @@ This client was implemented according to [RFC1939](https://www.ietf.org/rfc/rfc1
 
 ## Missing commands
 
-- NOOP
 - RETR
 - TOP
 - APOP

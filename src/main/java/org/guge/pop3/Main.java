@@ -21,6 +21,8 @@ public class Main {
             System.out.println(client.stats());
             System.out.println(client.uidl(1));
 
+            client.noop();
+
             client.close();
         } catch (Exception e) {
             System.err.println(e);

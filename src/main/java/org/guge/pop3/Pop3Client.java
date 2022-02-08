@@ -42,7 +42,7 @@ public class Pop3Client implements Closeable, AutoCloseable {
         writer.close();
     }
 
-    public void authenticateWithCredentials(String username, String password) throws IOException {
+    public void authenticate(String username, String password) throws IOException {
         sendCommandAndValidate(String.format("USER %s", username));
         sendCommandAndValidate(String.format("PASS %s", password));
 
@@ -53,6 +53,10 @@ public class Pop3Client implements Closeable, AutoCloseable {
     public void logout() throws IOException {
         sendCommandAndValidate("QUIT");
         logger.debug("User has logged out");
+    }
+
+    public void noop() throws IOException {
+        sendCommandAndValidate("NOOP");
     }
 
     public StatsModel stats() throws IOException {
