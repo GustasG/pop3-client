@@ -10,6 +10,7 @@ public class Main {
                     .useSSL(true)
                     .build();
 
+            client.close();
         } catch (Exception e) {
             System.err.println(e);
         }

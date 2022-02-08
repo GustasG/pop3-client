@@ -2,11 +2,15 @@ package org.guge.pop3;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.ArrayList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.guge.pop3.models.StatsModel;
+import org.guge.pop3.models.MessageInfoModel;
 import org.guge.pop3.errors.ErrorResponseException;
+import org.guge.pop3.errors.InvalidSpecificationException;
 
 public class Pop3Client implements Closeable, AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(Pop3Client.class);
@@ -42,21 +46,70 @@ public class Pop3Client implements Closeable, AutoCloseable {
     }
 
     public void authenticate(String username, String password) throws IOException {
-        var usernameResponse = sendAndParse(String.format("USER %s", username));
-        logger.debug("Server response after sending USER command: {}", usernameResponse);
-
-        var passwordResponse = sendAndParse(String.format("PASS %s", password));
-        logger.debug("Server response after sending PASS command: {}", passwordResponse);
+        sendAndValidate(String.format("USER %s", username));
+        sendAndValidate(String.format("PASS %s", password));
 
         state = State.TRANSACTION;
         logger.info("User has been authenticated");
     }
 
     public void logout() throws IOException {
-        var response = sendAndParse("QUIT");
-        state = State.AUTHORIZATION;
+        sendAndValidate("QUIT");
+        logger.info("User has logged out");
+    }
 
-        logger.debug("Quit response: {}", response);
+    public StatsModel stats() throws IOException {
+        var response = sendAndParse("STAT");
+
+        try {
+            var stats = response.split(" ");
+
+            return new StatsModel(Integer.parseInt(stats[0]), Integer.parseInt(stats[1]) / 8);
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Stats response provided incorrect response format", e);
+        }
+    }
+
+    public MessageInfoModel[] info() throws IOException {
+        var response = sendAndParse("LIST");
+
+        try {
+            var listing = response.split(" ");
+            var messages = Integer.parseInt(listing[0]);
+            var infos = new ArrayList<MessageInfoModel>(messages);
+
+            for (int i = 0; i < messages; i++) {
+                var info = readResponse()
+                        .split(" ");
+
+                infos.add(new MessageInfoModel(Integer.parseInt(info[0]), Integer.parseInt(info[1]) / 8));
+            }
+
+            readResponse();
+            return infos.toArray(new MessageInfoModel[0]);
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Info response provided incorrect response format", e);
+        }
+    }
+
+    public MessageInfoModel info(int messageNumber) throws IOException {
+        var response = sendAndParse(String.format("LIST %d", messageNumber));
+
+        try {
+            var listing = response.split(" ");
+
+            return new MessageInfoModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]) / 8);
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Info response provided incorrect response format", e);
+        }
+    }
+
+    public void delete(int messageNumber) throws IOException {
+        sendAndValidate(String.format("DELE %d", messageNumber));
+    }
+
+    public void reset() throws IOException {
+        sendAndValidate("RSET");
     }
 
     private void sendCommand(String command) throws IOException {
@@ -71,8 +124,12 @@ public class Pop3Client implements Closeable, AutoCloseable {
         }
     }
 
+    private String readResponse() throws IOException {
+        return reader.readLine();
+    }
+
     private String readResponseAndParse() throws IOException {
-        var response = reader.readLine();
+        var response = readResponse();
         validateResponse(response);
 
         return response.substring(Math.min(response.length(), 4));
@@ -84,7 +141,7 @@ public class Pop3Client implements Closeable, AutoCloseable {
     }
 
     private void readResponseAndValidate() throws IOException {
-        var response = reader.readLine();
+        var response = readResponse();
         validateResponse(response);
     }
 
