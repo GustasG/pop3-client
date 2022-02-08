@@ -1,12 +1,14 @@
 package org.guge.pop3;
 
 import java.io.*;
-import java.net.Socket;
 import java.util.ArrayList;
+import java.net.Socket;
+import java.net.SocketException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.guge.pop3.models.UIDLModel;
 import org.guge.pop3.models.StatsModel;
 import org.guge.pop3.models.MessageInfoModel;
 import org.guge.pop3.errors.ErrorResponseException;
@@ -26,15 +28,10 @@ public class Pop3Client implements Closeable, AutoCloseable {
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
-        var greeting = readResponseAndParse();
+        var greeting = readResponseAndTrim();
         this.state = State.AUTHORIZATION;
 
-        logger.info("Successfully connected. Server greeting: {}", greeting);
-    }
-
-    public Pop3Client(Socket socket, String username, String password) throws IOException {
-        this(socket);
-        authenticate(username, password);
+        logger.debug("Connection established. Server greeting: {}", greeting);
     }
 
     @Override
@@ -45,33 +42,43 @@ public class Pop3Client implements Closeable, AutoCloseable {
         writer.close();
     }
 
-    public void authenticate(String username, String password) throws IOException {
-        sendAndValidate(String.format("USER %s", username));
-        sendAndValidate(String.format("PASS %s", password));
+    public void authenticateWithCredentials(String username, String password) throws IOException {
+        sendCommandAndValidate(String.format("USER %s", username));
+        sendCommandAndValidate(String.format("PASS %s", password));
 
         state = State.TRANSACTION;
-        logger.info("User has been authenticated");
+        logger.debug("User has been authenticated");
     }
 
     public void logout() throws IOException {
-        sendAndValidate("QUIT");
-        logger.info("User has logged out");
+        sendCommandAndValidate("QUIT");
+        logger.debug("User has logged out");
     }
 
     public StatsModel stats() throws IOException {
-        var response = sendAndParse("STAT");
+        var response = sendCommandAndTrim("STAT");
 
         try {
-            var stats = response.split(" ");
+            var listing = response.split(" ");
 
-            return new StatsModel(Integer.parseInt(stats[0]), Integer.parseInt(stats[1]) / 8);
+            return new StatsModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
         } catch (NumberFormatException e) {
-            throw new InvalidSpecificationException("Stats response provided incorrect response format", e);
+            throw new InvalidSpecificationException("Server provided incorrect response format", e);
+        }
+    }
+
+    private static MessageInfoModel createInfoModel(String response) {
+        try {
+            var listing = response.split(" ");
+
+            return new MessageInfoModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
     public MessageInfoModel[] info() throws IOException {
-        var response = sendAndParse("LIST");
+        var response = sendCommandAndTrim("LIST");
 
         try {
             var listing = response.split(" ");
@@ -79,37 +86,65 @@ public class Pop3Client implements Closeable, AutoCloseable {
             var infos = new ArrayList<MessageInfoModel>(messages);
 
             for (int i = 0; i < messages; i++) {
-                var info = readResponse()
-                        .split(" ");
-
-                infos.add(new MessageInfoModel(Integer.parseInt(info[0]), Integer.parseInt(info[1]) / 8));
+                var currentListing = readResponse();
+                infos.add(createInfoModel(currentListing));
             }
 
-            readResponse();
+            validateTerminatingOctet();
             return infos.toArray(new MessageInfoModel[0]);
         } catch (NumberFormatException e) {
-            throw new InvalidSpecificationException("Info response provided incorrect response format", e);
+            throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
     public MessageInfoModel info(int messageNumber) throws IOException {
-        var response = sendAndParse(String.format("LIST %d", messageNumber));
+        var response = sendCommandAndTrim(String.format("LIST %d", messageNumber));
 
-        try {
-            var listing = response.split(" ");
-
-            return new MessageInfoModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]) / 8);
-        } catch (NumberFormatException e) {
-            throw new InvalidSpecificationException("Info response provided incorrect response format", e);
-        }
+        return createInfoModel(response);
     }
 
     public void delete(int messageNumber) throws IOException {
-        sendAndValidate(String.format("DELE %d", messageNumber));
+        sendCommandAndValidate(String.format("DELE %d", messageNumber));
     }
 
     public void reset() throws IOException {
-        sendAndValidate("RSET");
+        sendCommandAndValidate("RSET");
+    }
+
+    private UIDLModel createUidlModel(String response) {
+        try {
+            var listing = response.split(" ");
+            return new UIDLModel(Integer.parseInt(listing[0]), listing[1]);
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Server provided incorrect response format", e);
+        }
+    }
+
+    public UIDLModel[] uidl() throws IOException {
+        sendCommandAndValidate("UIDL");
+        var uidls = new ArrayList<UIDLModel>();
+
+        try {
+            String response;
+
+            while (!(response = readResponse()).equals(".")) {
+                uidls.add(createUidlModel(response));
+            }
+
+            return uidls.toArray(new UIDLModel[0]);
+        } catch (NumberFormatException e) {
+            throw new InvalidSpecificationException("Server provided incorrect response format", e);
+        }
+    }
+
+    public UIDLModel uidl(int messageNumber) throws IOException {
+        var response = sendCommandAndTrim(String.format("UIDL %d", messageNumber));
+
+        return createUidlModel(response);
+    }
+
+    public void setTimeout(int timeout) throws SocketException {
+        socket.setSoTimeout(timeout);
     }
 
     private void sendCommand(String command) throws IOException {
@@ -128,16 +163,16 @@ public class Pop3Client implements Closeable, AutoCloseable {
         return reader.readLine();
     }
 
-    private String readResponseAndParse() throws IOException {
+    private String readResponseAndTrim() throws IOException {
         var response = readResponse();
         validateResponse(response);
 
         return response.substring(Math.min(response.length(), 4));
     }
 
-    private String sendAndParse(String command) throws IOException {
+    private String sendCommandAndTrim(String command) throws IOException {
         sendCommand(command);
-        return readResponseAndParse();
+        return readResponseAndTrim();
     }
 
     private void readResponseAndValidate() throws IOException {
@@ -145,8 +180,16 @@ public class Pop3Client implements Closeable, AutoCloseable {
         validateResponse(response);
     }
 
-    private void sendAndValidate(String command) throws IOException {
+    private void sendCommandAndValidate(String command) throws IOException {
         sendCommand(command);
         readResponseAndValidate();
+    }
+
+    private void validateTerminatingOctet() throws IOException {
+        var response = readResponse();
+
+        if (!response.equals(".")) {
+            throw new InvalidSpecificationException("Server stream did not end with termination octet");
+        }
     }
 }

@@ -5,31 +5,41 @@ import java.io.IOException;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
-public class Pop3ClientFactory {
+public class Pop3ClientBuilder {
     private String host;
     private int port;
     private String username;
     private String password;
     private boolean useSsl;
+    private int timeout;
 
-    public Pop3ClientFactory useHost(String host) {
+    public Pop3ClientBuilder() {
+        timeout = 15 * 1_000;
+    }
+
+    public Pop3ClientBuilder useHost(String host) {
         this.host = host;
         return this;
     }
 
-    public Pop3ClientFactory usePort(int port) {
+    public Pop3ClientBuilder usePort(int port) {
         this.port = port;
         return this;
     }
 
-    public Pop3ClientFactory useCredentials(String username, String password) {
+    public Pop3ClientBuilder useCredentials(String username, String password) {
         this.username = username;
         this.password = password;
         return this;
     }
 
-    public Pop3ClientFactory useSSL(boolean useSsl) {
+    public Pop3ClientBuilder useSSL(boolean useSsl) {
         this.useSsl = useSsl;
+        return this;
+    }
+
+    public Pop3ClientBuilder useTimeout(int timeout) {
+        this.timeout = timeout;
         return this;
     }
 
@@ -37,11 +47,14 @@ public class Pop3ClientFactory {
         var socket = getSocketFactory()
                 .createSocket(host, port);
 
+        var client = new Pop3Client(socket);
+        client.setTimeout(timeout);
+
         if (username != null && password != null) {
-            return new Pop3Client(socket, username, password);
+            client.authenticateWithCredentials(username, password);
         }
 
-        return new Pop3Client(socket);
+        return client;
     }
 
     private SocketFactory getSocketFactory() {
