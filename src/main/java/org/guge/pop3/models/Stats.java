@@ -5,5 +5,5 @@ package org.guge.pop3.models;
  * @param messageCount number of messages in the maildrop
  * @param totalSize size of mail drop in octets
  */
-public record StatsModel(int messageCount, int totalSize) {
+public record Stats(int messageCount, int totalSize) {
 }

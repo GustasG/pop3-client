@@ -9,10 +9,10 @@ import java.net.SocketException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.guge.pop3.models.UIDL;
+import org.guge.pop3.models.Stats;
 import org.guge.pop3.models.Message;
-import org.guge.pop3.models.UIDLModel;
-import org.guge.pop3.models.StatsModel;
-import org.guge.pop3.models.MessageInfoModel;
+import org.guge.pop3.models.MessageInfo;
 import org.guge.pop3.errors.ErrorResponseException;
 import org.guge.pop3.errors.InvalidSpecificationException;
 
@@ -56,35 +56,35 @@ public class Pop3Client implements Closeable, AutoCloseable {
         sendCommandAndValidate("NOOP");
     }
 
-    public StatsModel stats() throws IOException {
+    public Stats stats() throws IOException {
         var response = sendCommandAndTrim("STAT");
 
         try {
             var listing = response.split(" ");
 
-            return new StatsModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
+            return new Stats(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
         } catch (NumberFormatException e) {
             throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
-    private static MessageInfoModel createInfoModel(String response) {
+    private static MessageInfo createInfoModel(String response) {
         try {
             var listing = response.split(" ");
 
-            return new MessageInfoModel(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
+            return new MessageInfo(Integer.parseInt(listing[0]), Integer.parseInt(listing[1]));
         } catch (NumberFormatException e) {
             throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
-    public MessageInfoModel[] info() throws IOException {
+    public MessageInfo[] info() throws IOException {
         var response = sendCommandAndTrim("LIST");
 
         try {
             var listing = response.split(" ");
             var messages = Integer.parseInt(listing[0]);
-            var infos = new ArrayList<MessageInfoModel>(messages);
+            var infos = new ArrayList<MessageInfo>(messages);
 
             for (int i = 0; i < messages; i++) {
                 var currentListing = readResponse();
@@ -92,13 +92,13 @@ public class Pop3Client implements Closeable, AutoCloseable {
             }
 
             validateTerminatingOctet();
-            return infos.toArray(new MessageInfoModel[0]);
+            return infos.toArray(new MessageInfo[0]);
         } catch (NumberFormatException e) {
             throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
-    public MessageInfoModel info(int messageNumber) throws IOException {
+    public MessageInfo info(int messageNumber) throws IOException {
         var response = sendCommandAndTrim(String.format("LIST %d", messageNumber));
 
         return createInfoModel(response);
@@ -143,18 +143,18 @@ public class Pop3Client implements Closeable, AutoCloseable {
         sendCommandAndValidate("RSET");
     }
 
-    private UIDLModel createUidlModel(String response) {
+    private UIDL createUidlModel(String response) {
         try {
             var listing = response.split(" ");
-            return new UIDLModel(Integer.parseInt(listing[0]), listing[1]);
+            return new UIDL(Integer.parseInt(listing[0]), listing[1]);
         } catch (NumberFormatException e) {
             throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
-    public UIDLModel[] uidl() throws IOException {
+    public UIDL[] uidl() throws IOException {
         sendCommandAndValidate("UIDL");
-        var uidls = new ArrayList<UIDLModel>();
+        var uidls = new ArrayList<UIDL>();
 
         try {
             String response;
@@ -163,13 +163,13 @@ public class Pop3Client implements Closeable, AutoCloseable {
                 uidls.add(createUidlModel(response));
             }
 
-            return uidls.toArray(new UIDLModel[0]);
+            return uidls.toArray(new UIDL[0]);
         } catch (NumberFormatException e) {
             throw new InvalidSpecificationException("Server provided incorrect response format", e);
         }
     }
 
-    public UIDLModel uidl(int messageNumber) throws IOException {
+    public UIDL uidl(int messageNumber) throws IOException {
         var response = sendCommandAndTrim(String.format("UIDL %d", messageNumber));
 
         return createUidlModel(response);

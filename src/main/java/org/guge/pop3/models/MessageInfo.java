@@ -5,5 +5,5 @@ package org.guge.pop3.models;
  * @param number message-number of the message
  * @param size exact size of message in octets
  */
-public record MessageInfoModel(int number, int size) {
+public record MessageInfo(int number, int size) {
 }

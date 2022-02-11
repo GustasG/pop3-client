@@ -5,5 +5,5 @@ package org.guge.pop3.models;
  * @param number message-number of the message
  * @param id unique-id of the message
  */
-public record UIDLModel(int number, String id) {
+public record UIDL(int number, String id) {
 }
