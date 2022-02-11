@@ -16,9 +16,9 @@ This client was implemented according to [RFC1939](https://www.ietf.org/rfc/rfc1
 - DELE
 - RSET
 - UIDL [msg]
+- RETR
 
 ## Missing commands
 
-- RETR
 - TOP
 - APOP

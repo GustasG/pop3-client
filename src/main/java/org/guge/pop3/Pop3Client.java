@@ -1,13 +1,15 @@
 package org.guge.pop3;
 
 import java.io.*;
-import java.util.ArrayList;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.net.Socket;
 import java.net.SocketException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.guge.pop3.models.Message;
 import org.guge.pop3.models.UIDLModel;
 import org.guge.pop3.models.StatsModel;
 import org.guge.pop3.models.MessageInfoModel;
@@ -20,7 +22,6 @@ public class Pop3Client implements Closeable, AutoCloseable {
     private final Socket socket;
     private final BufferedReader reader;
     private final BufferedWriter writer;
-    private State state;
 
     public Pop3Client(Socket socket) throws IOException {
         this.socket = socket;
@@ -29,14 +30,11 @@ public class Pop3Client implements Closeable, AutoCloseable {
         writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
         var greeting = readResponseAndTrim();
-        this.state = State.AUTHORIZATION;
-
         logger.debug("Connection established. Server greeting: {}", greeting);
     }
 
     @Override
     public void close() throws IOException {
-        logout();
         socket.close();
         reader.close();
         writer.close();
@@ -46,7 +44,6 @@ public class Pop3Client implements Closeable, AutoCloseable {
         sendCommandAndValidate(String.format("USER %s", username));
         sendCommandAndValidate(String.format("PASS %s", password));
 
-        state = State.TRANSACTION;
         logger.debug("User has been authenticated");
     }
 
@@ -105,6 +102,37 @@ public class Pop3Client implements Closeable, AutoCloseable {
         var response = sendCommandAndTrim(String.format("LIST %d", messageNumber));
 
         return createInfoModel(response);
+    }
+
+    private Map<String, String> readHeaders() throws IOException {
+        var lines = new ArrayList<String>();
+        String line;
+
+        while (!(line = readResponse()).isEmpty()) {
+            if (Character.isLetter(line.charAt(0))) {
+                lines.add(line);
+            } else {
+                var currentLine = lines.get(lines.size() - 1);
+                lines.set(lines.size() - 1, currentLine + line.strip());
+            }
+        }
+
+        return lines.stream()
+                .map(l -> l.split(": ", 2))
+                .collect(Collectors.toMap(s -> s[0], s -> s[1], (s1, s2) -> s1));
+    }
+
+    public Message message(int messageNumber) throws IOException {
+        sendCommandAndValidate(String.format("RETR %d", messageNumber));
+        var headers = readHeaders();
+        var builder = new StringBuilder();
+        String line;
+
+        while (!(line = readResponse()).equals(".")) {
+            builder.append(line);
+        }
+
+        return new Message(headers, builder.toString());
     }
 
     public void delete(int messageNumber) throws IOException {
